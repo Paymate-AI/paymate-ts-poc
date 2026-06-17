@@ -1,0 +1,22 @@
+{
+  "name": "whatsapp-webhook-service",
+  "version": "1.0.0",
+  "description": "WhatsApp Bot Fastify Webhook Service",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@fastify/formbody": "^7.4.0",
+    "fastify": "^4.28.1",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "tsx": "^4.15.7",
+    "typescript": "^5.5.2"
+  }
+}
