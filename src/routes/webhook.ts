@@ -1,6 +1,7 @@
 import { FastifyPluginAsync } from 'fastify';
 import { callAI } from '../services/python-bridge.js';
 import { sendText } from '../services/whatsapp.js';
+import { getSession, getConversationHistory, appendMessage } from '../services/db.js';
 import { WhatsAppMessage, WhatsAppWebhookBody } from '../types/index.js';
 
 interface WebhookGetQuery {
@@ -70,18 +71,27 @@ export const webhookRoutes: FastifyPluginAsync = async (fastify) => {
       return;
     }
 
-    // Process asynchronously in the background so we don't hold the HTTP connection open
-    // and risk timing out on the client's side (Meta requires responses within 3 seconds)
     const handleMessageAsync = async () => {
       try {
-        // Send to AI service. No session management is set up yet, so history is an empty array.
-        const aiResponse = await callAI(customerId, text, []);
+        // Load session and conversation history in parallel
+        const [session, history] = await Promise.all([
+          getSession(customerId),
+          getConversationHistory(customerId),
+        ]);
+
+        fastify.log.info({ customerId, state: session.state }, 'Session loaded');
+
+        // Persist the incoming user message
+        await appendMessage(customerId, 'user', text);
+
+        // Send to AI service with full conversation history
+        const aiResponse = await callAI(customerId, text, history);
 
         if (aiResponse.action === null) {
-          // If action is null, send reply back to the user via WhatsApp
+          // Persist assistant reply and send to WhatsApp
+          await appendMessage(customerId, 'assistant', aiResponse.reply);
           await sendText(customerId, aiResponse.reply);
         } else if (aiResponse.action.type === 'initiate_payment') {
-          // If initiate_payment action is triggered, log payload
           fastify.log.info(
             { action: aiResponse.action },
             'Payment initiation requested (placeholder handler logged)'
