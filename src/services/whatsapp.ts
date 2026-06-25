@@ -13,7 +13,7 @@ export async function sendText(to: string, message: string): Promise<void> {
     throw new Error('Missing WHATSAPP_TOKEN or PHONE_NUMBER_ID in environment variables');
   }
 
-  const url = `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`;
+  const url = `https://graph.facebook.com/v25.0/${phoneNumberId}/messages`;
 
   const body = {
     messaging_product: 'whatsapp',
