@@ -13,22 +13,15 @@ export default prisma;
 // ── Sessions ──────────────────────────────────────────────
 
 export async function getSession(customerWhatsappId: string) {
-  const session = await prisma.customerSession.findUnique({
+  return prisma.customerSession.upsert({
     where: { customerWhatsappId },
-  });
-
-  if (!session) {
-    return {
+    update: {},
+    create: {
       customerWhatsappId,
-      activeBusinessCode: null,
-      activeBusinessId: null,
       state: SessionState.IDLE,
       data: {},
-      updatedAt: new Date(),
-    };
-  }
-
-  return session;
+    },
+  });
 }
 
 export async function updateSession(
