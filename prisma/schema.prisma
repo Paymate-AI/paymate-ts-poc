@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Business {
+  id               String   @id @default(cuid())
+  ownerWhatsappId  String   @unique
+  businessName     String
+  uniqueCode       String   @unique
+  ownerName        String
+  email            String
+  createdAt        DateTime @default(now())
+
+  catalogItems     CatalogItem[]
+  transactions     Transaction[]
+  customerSessions CustomerSession[]
+}
+
+model CatalogItem {
+  id         String   @id @default(cuid())
+  businessId String
+  name       String
+  price      Float
+  createdAt  DateTime @default(now())
+
+  business   Business @relation(fields: [businessId], references: [id])
+}
+
+model CustomerSession {
+  customerWhatsappId  String   @id
+  activeBusinessCode  String?
+  activeBusinessId    String?
+  state               SessionState @default(IDLE)
+  data                Json     @default("{}")
+  updatedAt           DateTime @updatedAt
+
+  business            Business? @relation(fields: [activeBusinessId], references: [id])
+  messages            ConversationMessage[]
+}
+
+model ConversationMessage {
+  id                 String   @id @default(cuid())
+  customerWhatsappId String
+  role               MessageRole
+  content            String
+  createdAt          DateTime @default(now())
+
+  session            CustomerSession @relation(fields: [customerWhatsappId], references: [customerWhatsappId])
+}
+
+model Transaction {
+  id                   String            @id @default(cuid())
+  ownerWhatsappId      String
+  customerWhatsappId   String
+  businessCode         String
+  amount               Float
+  description          String
+  alatTransactionId    String?
+  alatOrderId          String?
+  virtualAccountNumber String?
+  status               TransactionStatus @default(PENDING)
+  createdAt            DateTime          @default(now())
+  expiresAt            DateTime?
+
+  business             Business @relation(fields: [ownerWhatsappId], references: [ownerWhatsappId])
+}
+
+enum SessionState {
+  IDLE
+  AWAITING_PAYMENT
+  TRANSFER_PENDING
+}
+
+enum MessageRole {
+  user
+  assistant
+}
+
+enum TransactionStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  EXPIRED
+}
