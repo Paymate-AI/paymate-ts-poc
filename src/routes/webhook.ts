@@ -3,6 +3,7 @@ import { callAI } from '../services/python-bridge.js';
 import { sendText } from '../services/whatsapp.js';
 import { getSession, getConversationHistory, appendMessage } from '../services/db.js';
 import { WhatsAppMessage, WhatsAppWebhookBody } from '../types/index.js';
+import { handleFlow } from '../services/flow.js';
 
 interface WebhookGetQuery {
   'hub.mode'?: string;
@@ -67,7 +68,10 @@ export const webhookRoutes: FastifyPluginAsync = async (fastify) => {
 
     const text = extractText(message);
     if (!text) {
-      fastify.log.info({ messageId: message.id, type: message.type }, 'Skipped non-supported/empty message type');
+      fastify.log.info(
+        { messageId: message.id, type: message.type },
+        'Skipped non-supported/empty message type',
+      );
       return;
     }
 
@@ -84,24 +88,7 @@ export const webhookRoutes: FastifyPluginAsync = async (fastify) => {
         // Persist the incoming user message
         await appendMessage(customerId, 'user', text);
 
-        // Send to AI service with full conversation history
-        const aiResponse = await callAI(customerId, text, history);
-
-        if (aiResponse.action === null) {
-          // Persist assistant reply and send to WhatsApp
-          await appendMessage(customerId, 'assistant', aiResponse.reply);
-          await sendText(customerId, aiResponse.reply);
-        } else if (aiResponse.action.type === 'initiate_payment') {
-          fastify.log.info(
-            { action: aiResponse.action },
-            'Payment initiation requested (placeholder handler logged)'
-          );
-        } else {
-          fastify.log.info(
-            { action: aiResponse.action },
-            `Received unhandled action type: ${aiResponse.action.type}`
-          );
-        }
+        await handleFlow(customerId, text);
       } catch (err) {
         fastify.log.error(err, 'Error in background webhook processing');
       }
