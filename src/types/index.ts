@@ -7,7 +7,7 @@ export interface AIResponse {
   reply: string;
   action: {
     type: string;
-    payload: Record<string, any>;
+    payload: Record<string, unknown>;
   } | null;
 }
 
