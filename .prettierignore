@@ -1,0 +1,11 @@
+node_modules/
+dist/
+src/generated/
+bun.lock
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+.env
+.env.*
+prisma/migrations/
+*.sql

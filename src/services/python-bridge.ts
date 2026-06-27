@@ -10,7 +10,7 @@ import { Message, AIResponse } from '../types/index.js';
 export async function callAI(
   customerId: string,
   message: string,
-  history: Message[]
+  history: Message[],
 ): Promise<AIResponse> {
   const pythonServiceUrl = process.env.PYTHON_SERVICE_URL;
   const internalSecret = process.env.INTERNAL_SECRET;

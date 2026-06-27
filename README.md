@@ -25,12 +25,14 @@ A Fastify-based TypeScript webhook service that serves as the entry point and ha
 ## Setup & Local Development
 
 1. **Clone the repository and install dependencies:**
+
    ```bash
    npm install
    ```
 
 2. **Configure environment variables:**
    Copy the example environment file and fill in your details:
+
    ```bash
    cp .env.example .env
    ```
@@ -45,6 +47,7 @@ A Fastify-based TypeScript webhook service that serves as the entry point and ha
 
 3. **Start the development server:**
    Uses `tsx watch` to auto-restart on changes:
+
    ```bash
    npm run dev
    ```
@@ -60,6 +63,7 @@ A Fastify-based TypeScript webhook service that serves as the entry point and ha
 ## Webhook Verification (GET /webhook)
 
 When registering your webhook URL in the Meta developer dashboard, configure:
+
 - **Callback URL**: `https://<your-domain>/webhook`
 - **Verify Token**: Must match the value of `VERIFY_TOKEN` in your `.env`.
 
@@ -70,11 +74,13 @@ The GET handler verifies this matching value and returns the challenge.
 ## Docker Support
 
 To build the Docker image locally:
+
 ```bash
 docker build -t whatsapp-webhook-service .
 ```
 
 To run the container locally on port 8080:
+
 ```bash
 docker run -p 8080:8080 --env-file .env whatsapp-webhook-service
 ```
