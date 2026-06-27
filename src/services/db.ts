@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient, SessionState, MessageRole } from '../generated/prisma/client.js';
+import { PrismaClient, SessionState, MessageRole, Prisma } from '../generated/prisma/client.js';
 import { Message } from '../types/index.js';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -30,8 +30,8 @@ export async function updateSession(
     activeBusinessCode?: string | null;
     activeBusinessId?: string | null;
     state?: SessionState;
-    data?: Record<string, any>;
-  }
+    data?: Prisma.InputJsonValue;
+  },
 ) {
   return prisma.customerSession.upsert({
     where: { customerWhatsappId },
@@ -44,7 +44,7 @@ export async function updateSession(
 
 export async function getConversationHistory(
   customerWhatsappId: string,
-  limit = 20
+  limit = 20,
 ): Promise<Message[]> {
   const messages = await prisma.conversationMessage.findMany({
     where: { customerWhatsappId },
@@ -61,7 +61,7 @@ export async function getConversationHistory(
 export async function appendMessage(
   customerWhatsappId: string,
   role: 'user' | 'assistant',
-  content: string
+  content: string,
 ) {
   return prisma.conversationMessage.create({
     data: {
@@ -70,4 +70,14 @@ export async function appendMessage(
       content,
     },
   });
+}
+
+export async function createBusiness(data: {
+  ownerWhatsappId: string;
+  businessName: string;
+  uniqueCode: string;
+  ownerName: string;
+  email: string;
+}) {
+  return prisma.business.create({ data });
 }
