@@ -8,13 +8,12 @@ export async function handleFlow(customerId: string, text: string): Promise<void
   // Global reset command
   if (normalised === 'restart' || normalised === 'reset' || normalised === 'start over') {
     await updateSession(customerId, {
-      state: SessionState.IDLE,
+      state: SessionState.KYC_NAME,
       activeBusinessCode: null,
       activeBusinessId: null,
       data: {},
     });
     await sendText(customerId, "Let's start fresh! What's your full name?");
-    await updateSession(customerId, { state: SessionState.KYC_NAME });
     return;
   }
 

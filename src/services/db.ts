@@ -7,8 +7,8 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
   max: 5,
-  idleTimeoutMillis: 10000,
-  connectionTimeoutMillis: 10000,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 20000,
 });
 
 const adapter = new PrismaPg(pool);
@@ -24,18 +24,31 @@ setInterval(
 
 export default prisma;
 
+async function withRetry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const isConnErr =
+        err instanceof Error &&
+        (err.message.includes('Connection terminated') || err.message.includes('timeout'));
+      if (!isConnErr || attempt === retries) throw err;
+      await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+    }
+  }
+  throw new Error('unreachable');
+}
+
 // ── Sessions ──────────────────────────────────────────────
 
 export async function getSession(customerWhatsappId: string) {
-  return prisma.customerSession.upsert({
-    where: { customerWhatsappId },
-    update: {},
-    create: {
-      customerWhatsappId,
-      state: SessionState.IDLE,
-      data: {},
-    },
-  });
+  return withRetry(() =>
+    prisma.customerSession.upsert({
+      where: { customerWhatsappId },
+      update: {},
+      create: { customerWhatsappId, state: SessionState.IDLE, data: {} },
+    }),
+  );
 }
 
 export async function updateSession(
@@ -47,11 +60,13 @@ export async function updateSession(
     data?: Prisma.InputJsonValue;
   },
 ) {
-  return prisma.customerSession.upsert({
-    where: { customerWhatsappId },
-    update: updates,
-    create: { customerWhatsappId, ...updates },
-  });
+  return withRetry(() =>
+    prisma.customerSession.upsert({
+      where: { customerWhatsappId },
+      update: updates,
+      create: { customerWhatsappId, ...updates },
+    }),
+  );
 }
 
 // ── Conversation History ──────────────────────────────────
@@ -60,11 +75,13 @@ export async function getConversationHistory(
   customerWhatsappId: string,
   limit = 20,
 ): Promise<Message[]> {
-  const messages = await prisma.conversationMessage.findMany({
-    where: { customerWhatsappId },
-    orderBy: { createdAt: 'asc' },
-    take: limit,
-  });
+  const messages = await withRetry(() =>
+    prisma.conversationMessage.findMany({
+      where: { customerWhatsappId },
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+    }),
+  );
 
   return messages.map((m) => ({
     role: m.role === MessageRole.user ? 'user' : 'assistant',
@@ -77,13 +94,15 @@ export async function appendMessage(
   role: 'user' | 'assistant',
   content: string,
 ) {
-  return prisma.conversationMessage.create({
-    data: {
-      customerWhatsappId,
-      role: role === 'user' ? MessageRole.user : MessageRole.assistant,
-      content,
-    },
-  });
+  return withRetry(() =>
+    prisma.conversationMessage.create({
+      data: {
+        customerWhatsappId,
+        role: role === 'user' ? MessageRole.user : MessageRole.assistant,
+        content,
+      },
+    }),
+  );
 }
 
 export async function createBusiness(data: {
@@ -93,5 +112,5 @@ export async function createBusiness(data: {
   ownerName: string;
   email: string;
 }) {
-  return prisma.business.create({ data });
+  return withRetry(() => prisma.business.create({ data }));
 }
