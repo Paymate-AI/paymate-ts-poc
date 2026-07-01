@@ -3,6 +3,21 @@ import { getSession, updateSession } from './db.js';
 import { sendText, sendButtons } from './whatsapp.js';
 
 export async function handleFlow(customerId: string, text: string): Promise<void> {
+  const normalised = text.trim().toLowerCase();
+
+  // Global reset command
+  if (normalised === 'restart' || normalised === 'reset' || normalised === 'start over') {
+    await updateSession(customerId, {
+      state: SessionState.IDLE,
+      activeBusinessCode: null,
+      activeBusinessId: null,
+      data: {},
+    });
+    await sendText(customerId, "Let's start fresh! What's your full name?");
+    await updateSession(customerId, { state: SessionState.KYC_NAME });
+    return;
+  }
+
   const session = await getSession(customerId);
 
   switch (session.state) {
@@ -130,7 +145,7 @@ async function handleOnboardingBusinessName(customerId: string, text: string): P
     activeBusinessCode: uniqueCode,
   });
 
-  const botNumber = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const botNumber = process.env.WHATSAPP_BOT_NUMBER;
   await sendText(
     customerId,
     `🎊 Your business *${businessName}* is live!\n\nYour unique link:\nwa.me/${botNumber}?text=${uniqueCode}\n\nShare this with your customers. They'll be connected to your store automatically.`,

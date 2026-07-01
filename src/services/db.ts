@@ -3,10 +3,24 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient, SessionState, MessageRole, Prisma } from '../generated/prisma/client.js';
 import { Message } from '../types/index.js';
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+  max: 5,
+  idleTimeoutMillis: 10000,
+  connectionTimeoutMillis: 10000,
+});
+
 const adapter = new PrismaPg(pool);
 
 const prisma = new PrismaClient({ adapter });
+
+setInterval(
+  async () => {
+    await prisma.$queryRaw`SELECT 1`;
+  },
+  3 * 60 * 1000,
+); // ping every 3 minutes
 
 export default prisma;
 
