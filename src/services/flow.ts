@@ -7,6 +7,39 @@ export async function handleFlow(customerId: string, text: string): Promise<void
 
   // Global reset command
   if (normalised === 'restart' || normalised === 'reset' || normalised === 'start over') {
+    const currentSession = await getSession(customerId);
+    const existingData = (currentSession.data as Record<string, unknown>) ?? {};
+    const name = existingData.name as string | undefined;
+    const email = existingData.email as string | undefined;
+
+    if (name && email) {
+      // Already fully onboarded — go straight back to intent selection
+      await updateSession(customerId, {
+        state: SessionState.INTENT_SELECTION,
+        activeBusinessCode: null,
+        activeBusinessId: null,
+        data: { name, email },
+      });
+      await sendButtons(customerId, `Welcome back, ${name}! What would you like to do?`, [
+        { id: 'register_business', title: 'Register a Business' },
+        { id: 'find_service', title: 'Find a Service' },
+      ]);
+      return;
+    }
+
+    if (name) {
+      // Have name, still need email
+      await updateSession(customerId, {
+        state: SessionState.KYC_EMAIL,
+        activeBusinessCode: null,
+        activeBusinessId: null,
+        data: { name },
+      });
+      await sendText(customerId, `Welcome back, ${name}! What's your email address?`);
+      return;
+    }
+
+    // Nothing on file yet — full fresh start
     await updateSession(customerId, {
       state: SessionState.KYC_NAME,
       activeBusinessCode: null,
