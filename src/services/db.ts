@@ -114,3 +114,61 @@ export async function createBusiness(data: {
 }) {
   return withRetry(() => prisma.business.create({ data }));
 }
+
+export async function getBusinessByCode(uniqueCode: string) {
+  return withRetry(() =>
+    prisma.business.findUnique({
+      where: { uniqueCode },
+    }),
+  );
+}
+
+export async function getBusinessByOwner(ownerWhatsappId: string) {
+  return withRetry(() =>
+    prisma.business.findUnique({
+      where: { ownerWhatsappId },
+    }),
+  );
+}
+
+export async function createCatalogItem(data: { businessId: string; name: string; price: number }) {
+  return withRetry(() => prisma.catalogItem.create({ data }));
+}
+
+export async function getCatalogItems(businessId: string) {
+  return withRetry(() =>
+    prisma.catalogItem.findMany({
+      where: { businessId },
+      orderBy: { createdAt: 'asc' },
+    }),
+  );
+}
+
+export async function deleteCatalogItem(id: string) {
+  return withRetry(() =>
+    prisma.catalogItem.delete({
+      where: { id },
+    }),
+  );
+}
+
+export async function deleteBusinessByOwner(ownerWhatsappId: string) {
+  return withRetry(async () => {
+    const business = await prisma.business.findUnique({
+      where: { ownerWhatsappId },
+    });
+    if (!business) return;
+
+    await prisma.catalogItem.deleteMany({
+      where: { businessId: business.id },
+    });
+
+    await prisma.transaction.deleteMany({
+      where: { ownerWhatsappId },
+    });
+
+    await prisma.business.delete({
+      where: { id: business.id },
+    });
+  });
+}

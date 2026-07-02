@@ -1,6 +1,6 @@
 import { FastifyPluginAsync } from 'fastify';
-import { callAI } from '../services/python-bridge.js';
-import { sendText } from '../services/whatsapp.js';
+// import { callAI } from '../services/python-bridge.js';
+// import { sendText } from '../services/whatsapp.js';
 import { getSession, getConversationHistory, appendMessage } from '../services/db.js';
 import { WhatsAppMessage, WhatsAppWebhookBody } from '../types/index.js';
 import { handleFlow } from '../services/flow.js';
