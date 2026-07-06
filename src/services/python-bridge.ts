@@ -1,16 +1,17 @@
 import fetch from 'node-fetch';
-import { Message, AIResponse } from '../types/index.js';
+import { AIResponse } from '../types/index.js';
 
 /**
- * Sends a message and message history to the Python AI microservice.
+ * Sends a message to the Python AI microservice for a given business.
+ * History is fetched by the Python service itself via the /chats/:businessId/:customerId/recent endpoint.
  * @param customerId The WhatsApp ID of the customer.
+ * @param businessId The ID of the business the customer is interacting with.
  * @param message The current text/payload extracted from the webhook.
- * @param history The conversation history list.
  */
 export async function callAI(
   customerId: string,
+  businessId: string,
   message: string,
-  history: Message[],
 ): Promise<AIResponse> {
   const pythonServiceUrl = process.env.PYTHON_SERVICE_URL;
   const internalSecret = process.env.INTERNAL_SECRET;
@@ -19,19 +20,15 @@ export async function callAI(
     throw new Error('Missing PYTHON_SERVICE_URL or INTERNAL_SECRET in environment variables');
   }
 
-  const url = `${pythonServiceUrl.replace(/\/$/, '')}/ai/chat`;
+  const url = `${pythonServiceUrl.replace(/\/$/, '')}/bot?business_id=${businessId}`;
 
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Internal-Secret': internalSecret,
+      Authorization: `Bearer ${internalSecret}`,
     },
-    body: JSON.stringify({
-      customerId,
-      message,
-      history,
-    }),
+    body: JSON.stringify({ customerId, message }),
   });
 
   if (!response.ok) {
@@ -39,6 +36,5 @@ export async function callAI(
     throw new Error(`Python AI service call failed with status ${response.status}: ${errorText}`);
   }
 
-  const data = (await response.json()) as AIResponse;
-  return data;
+  return response.json() as Promise<AIResponse>;
 }

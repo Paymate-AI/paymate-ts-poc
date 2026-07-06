@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import formbody from '@fastify/formbody';
 import { webhookRoutes } from './routes/webhook.js';
+import { chatsRoutes } from './routes/chats.js';
 
 const fastify = Fastify({
   logger: true,
@@ -11,6 +12,9 @@ fastify.register(formbody);
 
 // Register Webhook routes
 fastify.register(webhookRoutes);
+
+// AI Bot routes
+fastify.register(chatsRoutes);
 
 // Get Port from environment
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 8080;

@@ -1,7 +1,7 @@
 import { FastifyPluginAsync } from 'fastify';
 // import { callAI } from '../services/python-bridge.js';
 // import { sendText } from '../services/whatsapp.js';
-import { getSession, getConversationHistory, appendMessage } from '../services/db.js';
+import { getSession, appendMessage } from '../services/db.js';
 import { WhatsAppMessage, WhatsAppWebhookBody } from '../types/index.js';
 import { handleFlow } from '../services/flow.js';
 
@@ -77,11 +77,8 @@ export const webhookRoutes: FastifyPluginAsync = async (fastify) => {
 
     const handleMessageAsync = async () => {
       try {
-        // Load session and conversation history in parallel
-        const [session, history] = await Promise.all([
-          getSession(customerId),
-          getConversationHistory(customerId),
-        ]);
+        // Load session
+        const session = await getSession(customerId);
 
         fastify.log.info({ customerId, state: session.state }, 'Session loaded');
 

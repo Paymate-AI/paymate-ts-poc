@@ -3,7 +3,6 @@ import {
   getSession,
   updateSession,
   getBusinessByCode,
-  getConversationHistory,
   appendMessage,
   createBusiness,
   getBusinessByOwner,
@@ -100,7 +99,7 @@ export async function handleFlow(customerId: string, text: string): Promise<void
       return sendMainMenu(customerId, 'What would you like to do next?');
 
     case SessionState.CUSTOMER_BROWSING:
-      return handleCustomerBrowsing(customerId, text);
+      return handleCustomerBrowsing(customerId, session.activeBusinessId, text);
 
     default:
       await sendText(customerId, "Sorry, I didn't understand that. Please try again.");
@@ -109,11 +108,29 @@ export async function handleFlow(customerId: string, text: string): Promise<void
 
 // ── Handlers ──────────────────────────────────────────────
 
-async function handleIdle(customerId: string, _text: string): Promise<void> {
-  // Check if message is a business code
-  // (we'll wire this up when we build customer routing)
+async function handleIdle(customerId: string, text: string): Promise<void> {
+  const possibleCode = text
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
 
-  // Fresh user — start KYC
+  if (possibleCode) {
+    const business = await getBusinessByCode(possibleCode);
+    if (business) {
+      await updateSession(customerId, {
+        state: SessionState.CUSTOMER_BROWSING,
+        activeBusinessCode: business.uniqueCode,
+        activeBusinessId: business.id,
+      });
+      await sendText(
+        customerId,
+        `👋 Welcome to ${business.businessName}! Ask me anything about our products, or let me know what you'd like to order.`,
+      );
+      return;
+    }
+  }
+
+  // Fresh user, no matching code — start KYC
   await updateSession(customerId, { state: SessionState.KYC_NAME });
   await sendText(
     customerId,
@@ -269,12 +286,17 @@ async function handleIntentSelection(customerId: string, text: string): Promise<
   }
 
   if (catalogState === 'DELETE_BUSINESS_CONFIRM') {
-    if (
+    const shouldDelete =
       normalizedText === 'confirm_delete_business' ||
       normalizedText === 'yes' ||
-      normalizedText.includes('delete') ||
-      normalizedText.includes('yes')
-    ) {
+      normalizedText === 'delete' ||
+      (normalizedText.includes('delete') &&
+        !normalizedText.includes('cancel') &&
+        !normalizedText.includes('no') &&
+        !normalizedText.includes('dont') &&
+        normalizedText !== 'cancel_delete_business');
+
+    if (shouldDelete) {
       // Perform delete
       await deleteBusinessByOwner(customerId);
 
@@ -322,37 +344,17 @@ async function handleIntentSelection(customerId: string, text: string): Promise<
   }
 
   // Handle Menu Buttons
-  if (normalizedText === 'register_business' || normalizedText.includes('register')) {
+  // 1. Exact button IDs and direct typed equivalents first
+  if (normalizedText === 'register_business' || normalizedText === 'register') {
     await updateSession(customerId, { state: SessionState.ONBOARDING_BUSINESS_NAME });
     await sendText(customerId, "Great! Let's set up your business. What's your business name?");
     return;
   }
 
-  if (normalizedText === 'find_service' || normalizedText.includes('find')) {
+  if (normalizedText === 'find_service' || normalizedText === 'find') {
     await sendText(
       customerId,
       'Please share the business link or code you received from the seller.',
-    );
-    return;
-  }
-
-  if (normalizedText === 'manage_catalog' || normalizedText.includes('catalog')) {
-    const business = await getBusinessByOwner(customerId);
-    if (!business) {
-      await sendText(customerId, 'You do not have a business registered yet.');
-      await sendMainMenu(customerId, 'Please select an option below:');
-      return;
-    }
-
-    // Show catalog sub-menu
-    await sendButtons(
-      customerId,
-      `*Manage Catalog* for *${business.businessName}*:\nSelect an option below:`,
-      [
-        { id: 'add_item', title: 'Add Item' },
-        { id: 'remove_item', title: 'Remove Item' },
-        { id: 'view_catalog', title: 'View Catalog' },
-      ],
     );
     return;
   }
@@ -431,6 +433,27 @@ async function handleIntentSelection(customerId: string, text: string): Promise<
     return;
   }
 
+  if (normalizedText === 'manage_catalog' || normalizedText === 'manage catalog') {
+    const business = await getBusinessByOwner(customerId);
+    if (!business) {
+      await sendText(customerId, 'You do not have a business registered yet.');
+      await sendMainMenu(customerId, 'Please select an option below:');
+      return;
+    }
+
+    // Show catalog sub-menu
+    await sendButtons(
+      customerId,
+      `*Manage Catalog* for *${business.businessName}*:\nSelect an option below:`,
+      [
+        { id: 'add_item', title: 'Add Item' },
+        { id: 'remove_item', title: 'Remove Item' },
+        { id: 'view_catalog', title: 'View Catalog' },
+      ],
+    );
+    return;
+  }
+
   if (normalizedText === 'delete_business' || normalizedText === 'delete business') {
     await updateSession(customerId, {
       data: {
@@ -455,8 +478,8 @@ async function handleIntentSelection(customerId: string, text: string): Promise<
     return;
   }
 
-  // Fallback / Typo handling
-  const isButtonPayload = [
+  // 2. Loose fallback/includes checks for free text (excluding button IDs)
+  const isButtonId = [
     'register_business',
     'find_service',
     'manage_catalog',
@@ -467,7 +490,45 @@ async function handleIntentSelection(customerId: string, text: string): Promise<
     'main_menu',
   ].includes(normalizedText);
 
-  if (!isButtonPayload && text.trim().length > 0) {
+  if (!isButtonId) {
+    if (normalizedText.includes('register')) {
+      await updateSession(customerId, { state: SessionState.ONBOARDING_BUSINESS_NAME });
+      await sendText(customerId, "Great! Let's set up your business. What's your business name?");
+      return;
+    }
+
+    if (normalizedText.includes('find')) {
+      await sendText(
+        customerId,
+        'Please share the business link or code you received from the seller.',
+      );
+      return;
+    }
+
+    if (normalizedText.includes('catalog')) {
+      const business = await getBusinessByOwner(customerId);
+      if (!business) {
+        await sendText(customerId, 'You do not have a business registered yet.');
+        await sendMainMenu(customerId, 'Please select an option below:');
+        return;
+      }
+
+      // Show catalog sub-menu
+      await sendButtons(
+        customerId,
+        `*Manage Catalog* for *${business.businessName}*:\nSelect an option below:`,
+        [
+          { id: 'add_item', title: 'Add Item' },
+          { id: 'remove_item', title: 'Remove Item' },
+          { id: 'view_catalog', title: 'View Catalog' },
+        ],
+      );
+      return;
+    }
+  }
+
+  // 3. Fallback / Typo handling
+  if (!isButtonId && text.trim().length > 0) {
     await sendText(
       customerId,
       `Sorry, I didn't recognize that option. Please choose one of the menu options below:`,
@@ -514,10 +575,34 @@ async function handleOnboardingBusinessName(customerId: string, text: string): P
   );
 }
 
-async function handleCustomerBrowsing(customerId: string, text: string): Promise<void> {
-  const history = await getConversationHistory(customerId);
-  const aiResponse = await callAI(customerId, text, history);
+async function handleCustomerBrowsing(
+  customerId: string,
+  businessId: string | null,
+  text: string,
+): Promise<void> {
+  if (!businessId) {
+    await sendText(
+      customerId,
+      "Something went wrong — I've lost track of which business you're browsing. Type 'reset' to start over.",
+    );
+    return;
+  }
 
-  await sendText(customerId, aiResponse.reply);
-  await appendMessage(customerId, 'assistant', aiResponse.reply);
+  await appendMessage(customerId, 'user', text);
+
+  try {
+    const aiResponse = await callAI(customerId, businessId, text);
+    await appendMessage(customerId, 'assistant', aiResponse.reply);
+    await sendText(customerId, aiResponse.reply);
+
+    if (aiResponse.action?.type === 'HUMAN_HANDOFF') {
+      // TODO: escalate to business owner once that flow exists
+    }
+    // COLLECT_PAYMENT / PAYMENT_SUCCESSFUL — payload available for future wiring
+  } catch {
+    await sendText(
+      customerId,
+      'Sorry, something went wrong on my end. Please try again in a moment.',
+    );
+  }
 }
