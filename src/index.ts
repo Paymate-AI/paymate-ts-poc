@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import formbody from '@fastify/formbody';
-import { webhookRoutes } from './routes/webhook.js';
-import { chatsRoutes } from './routes/chats.js';
+import { webhookRoutes } from '@/routes/webhook.js';
+import { chatsRoutes } from '@/routes/chats.js';
 
 const fastify = Fastify({
   logger: true,

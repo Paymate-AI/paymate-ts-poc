@@ -18,7 +18,7 @@
 // }
 
 import { FastifyInstance } from 'fastify';
-import { getConversationHistory } from '../services/db.js';
+import { getConversationHistory } from '@/services/db.js';
 
 export async function chatsRoutes(app: FastifyInstance) {
   app.get('/chats/:businessId/:customerId/recent', async (request, reply) => {

@@ -1,5 +1,5 @@
 import fetch from 'node-fetch';
-import { AIResponse } from '../types/index.js';
+import { AIResponse } from '@/types/index.js';
 
 /**
  * Sends a message to the Python AI microservice for a given business.
