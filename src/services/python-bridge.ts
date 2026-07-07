@@ -10,7 +10,7 @@ import { AIResponse } from '@/types/index.js';
  */
 export async function callAI(
   customerId: string,
-  businessId: string,
+  businessId: string | null,
   message: string,
 ): Promise<AIResponse> {
   const pythonServiceUrl = process.env.PYTHON_SERVICE_URL;
@@ -20,7 +20,8 @@ export async function callAI(
     throw new Error('Missing PYTHON_SERVICE_URL or INTERNAL_SECRET in environment variables');
   }
 
-  const url = `${pythonServiceUrl.replace(/\/$/, '')}/bot?business_id=${businessId}`;
+  const queryParams = businessId ? `?business_id=${businessId}` : '';
+  const url = `${pythonServiceUrl.replace(/\/$/, '')}/bot${queryParams}`;
 
   const response = await fetch(url, {
     method: 'POST',
