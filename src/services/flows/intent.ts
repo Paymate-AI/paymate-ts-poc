@@ -12,6 +12,7 @@ import {
 } from '@/services/db.js';
 import { sendText, sendButtons } from '@/services/whatsapp.js';
 import { sendMainMenu } from '@/services/flows/menu.js';
+import { handleCustomerBrowsing } from '@/services/flows/customer-browsing.js';
 
 export async function handleIntentSelection(customerId: string, text: string): Promise<void> {
   const normalizedText = text.trim().toLowerCase();
@@ -357,12 +358,26 @@ export async function handleIntentSelection(customerId: string, text: string): P
     }
   }
 
-  // 3. Fallback / Typo handling
+  // 3. Fallback — if there's an active business context (or the user owns a business), route free text to the AI bot
   if (!isButtonId && text.trim().length > 0) {
-    await sendText(
-      customerId,
-      `Sorry, I didn't recognize that option. Please choose one of the menu options below:`,
-    );
+    let targetBusinessId = session.activeBusinessId;
+
+    if (!targetBusinessId) {
+      const ownedBusiness = await getBusinessByOwner(customerId);
+      if (ownedBusiness) {
+        targetBusinessId = ownedBusiness.id;
+        // Update session so they transition to browsing mode
+        await updateSession(customerId, {
+          state: SessionState.CUSTOMER_BROWSING,
+          activeBusinessId: ownedBusiness.id,
+          activeBusinessCode: ownedBusiness.uniqueCode,
+        });
+      }
+    }
+
+    // Fallback: call the AI concierge bot (businessId = null) for general assistance.
+    // This keeps the user in INTENT_SELECTION state, allowing them to type naturally or click buttons anytime.
+    return handleCustomerBrowsing(customerId, targetBusinessId, text);
   }
 
   await sendMainMenu(customerId, 'Please select an option:');
