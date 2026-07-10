@@ -13,8 +13,12 @@ import {
 import { sendText, sendButtons } from '@/services/whatsapp.js';
 import { sendMainMenu } from '@/services/flows/menu.js';
 import { handleCustomerBrowsing } from '@/services/flows/customer-browsing.js';
+import { AIResponse } from '@/types/index.js';
 
-export async function handleIntentSelection(customerId: string, text: string): Promise<void> {
+export async function handleIntentSelection(
+  customerId: string,
+  text: string,
+): Promise<AIResponse['action'] | null | void> {
   const normalizedText = text.trim().toLowerCase();
   const session = await getSession(customerId);
   const sessionData = (session.data as Prisma.JsonObject) ?? {};
@@ -310,73 +314,10 @@ export async function handleIntentSelection(customerId: string, text: string): P
     return;
   }
 
-  // 2. Loose fallback/includes checks for free text (excluding button IDs)
-  const isButtonId = [
-    'register_business',
-    'find_service',
-    'manage_catalog',
-    'delete_business',
-    'add_item',
-    'remove_item',
-    'view_catalog',
-    'main_menu',
-  ].includes(normalizedText);
-
-  if (!isButtonId) {
-    if (normalizedText.includes('register')) {
-      await updateSession(customerId, { state: SessionState.ONBOARDING_BUSINESS_NAME });
-      await sendText(customerId, "Great! Let's set up your business. What's your business name?");
-      return;
-    }
-
-    if (normalizedText.includes('find')) {
-      await sendText(
-        customerId,
-        'Please share the business link or code you received from the seller.',
-      );
-      return;
-    }
-
-    if (normalizedText.includes('catalog')) {
-      const business = await getBusinessByOwner(customerId);
-      if (!business) {
-        await sendText(customerId, 'You do not have a business registered yet.');
-        await sendMainMenu(customerId, 'Please select an option below:');
-        return;
-      }
-
-      await sendButtons(
-        customerId,
-        `*Manage Catalog* for *${business.businessName}*:\nSelect an option below:`,
-        [
-          { id: 'add_item', title: 'Add Item' },
-          { id: 'remove_item', title: 'Remove Item' },
-          { id: 'view_catalog', title: 'View Catalog' },
-        ],
-      );
-      return;
-    }
-  }
-
-  // 3. Fallback — if there's an active business context (or the user owns a business), route free text to the AI bot
-  if (!isButtonId && text.trim().length > 0) {
-    let targetBusinessId = session.activeBusinessId;
-
-    if (!targetBusinessId) {
-      const ownedBusiness = await getBusinessByOwner(customerId);
-      if (ownedBusiness) {
-        targetBusinessId = ownedBusiness.id;
-        // Update session so they transition to browsing mode
-        await updateSession(customerId, {
-          state: SessionState.CUSTOMER_BROWSING,
-          activeBusinessId: ownedBusiness.id,
-          activeBusinessCode: ownedBusiness.uniqueCode,
-        });
-      }
-    }
-
-    // Fallback: call the AI concierge bot (businessId = null) for general assistance.
-    // This keeps the user in INTENT_SELECTION state, allowing them to type naturally or click buttons anytime.
+  // 3. Fallback — route free text to the AI bot with current session state.
+  // If not currently browsing a business, pass null for businessId so they stay in INTENT_SELECTION state.
+  if (text.trim().length > 0) {
+    const targetBusinessId = session.activeBusinessId || null;
     return handleCustomerBrowsing(customerId, targetBusinessId, text);
   }
 

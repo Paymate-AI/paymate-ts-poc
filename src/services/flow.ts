@@ -6,6 +6,7 @@ import { handleIdle, handleKycName, handleKycEmail } from '@/services/flows/kyc.
 import { handleOnboardingBusinessName } from '@/services/flows/onboarding.js';
 import { handleIntentSelection } from '@/services/flows/intent.js';
 import { handleCustomerBrowsing } from '@/services/flows/customer-browsing.js';
+import { AIResponse } from '@/types/index.js';
 
 export async function handleFlow(customerId: string, text: string): Promise<void> {
   const normalised = text.trim().toLowerCase();
@@ -53,31 +54,99 @@ export async function handleFlow(customerId: string, text: string): Promise<void
   }
 
   const session = await getSession(customerId);
+  let action: AIResponse['action'] | void = null;
 
   switch (session.state) {
     case SessionState.IDLE:
-      return handleIdle(customerId, text);
+      action = await handleIdle(customerId, text);
+      break;
 
     case SessionState.KYC_NAME:
-      return handleKycName(customerId, text);
+      action = await handleKycName(customerId, text);
+      break;
 
     case SessionState.KYC_EMAIL:
-      return handleKycEmail(customerId, text);
+      action = await handleKycEmail(customerId, text);
+      break;
 
     case SessionState.INTENT_SELECTION:
-      return handleIntentSelection(customerId, text);
+      action = await handleIntentSelection(customerId, text);
+      break;
 
     case SessionState.ONBOARDING_BUSINESS_NAME:
-      return handleOnboardingBusinessName(customerId, text);
+      await handleOnboardingBusinessName(customerId, text);
+      break;
 
     case SessionState.ONBOARDING_COMPLETE:
       await updateSession(customerId, { state: SessionState.INTENT_SELECTION });
-      return sendMainMenu(customerId, 'What would you like to do next?');
+      await sendMainMenu(customerId, 'What would you like to do next?');
+      break;
 
     case SessionState.CUSTOMER_BROWSING:
-      return handleCustomerBrowsing(customerId, session.activeBusinessId, text);
+      action = await handleCustomerBrowsing(customerId, session.activeBusinessId, text);
+      break;
 
     default:
       await sendText(customerId, "Sorry, I didn't understand that. Please try again.");
+  }
+
+  // Execute AI action block payloads
+  if (action) {
+    if (action.type === 'TRIGGER_COMMAND') {
+      const command = action.payload?.command as string;
+      if (command) {
+        const isMainMenuCommand = [
+          'register_business',
+          'find_service',
+          'manage_catalog',
+          'delete_business',
+          'main_menu',
+        ].includes(command.trim().toLowerCase());
+
+        if (isMainMenuCommand) {
+          const currentSession = await getSession(customerId);
+          const sessionData = (currentSession.data as Prisma.JsonObject) ?? {};
+          await updateSession(customerId, {
+            state: SessionState.INTENT_SELECTION,
+            activeBusinessCode: null,
+            activeBusinessId: null,
+            data: sessionData,
+          });
+        }
+
+        return handleFlow(customerId, command);
+      }
+    }
+
+    if (action.type === 'SET_KYC_NAME') {
+      const name = action.payload?.name as string;
+      if (name) {
+        await updateSession(customerId, {
+          state: SessionState.KYC_EMAIL,
+          data: { name },
+        });
+        return;
+      }
+    }
+
+    if (action.type === 'SET_KYC_EMAIL') {
+      const email = action.payload?.email as string;
+      const nextCommand = action.payload?.next_command as string | undefined;
+      if (email) {
+        const currentSession = await getSession(customerId);
+        const name = ((currentSession.data as Prisma.JsonObject) ?? {}).name as string;
+        await updateSession(customerId, {
+          state: SessionState.INTENT_SELECTION,
+          data: { name, email },
+        });
+
+        if (nextCommand) {
+          return handleFlow(customerId, nextCommand);
+        }
+
+        await sendMainMenu(customerId, 'Please select an option below:');
+        return;
+      }
+    }
   }
 }
