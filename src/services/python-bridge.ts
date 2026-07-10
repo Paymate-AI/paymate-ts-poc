@@ -1,17 +1,21 @@
 import fetch from 'node-fetch';
-import { AIResponse } from '@/types/index.js';
+import { AIResponse, Message } from '@/types/index.js';
 
 /**
  * Sends a message to the Python AI microservice for a given business.
- * History is fetched by the Python service itself via the /chats/:businessId/:customerId/recent endpoint.
+ * Conversation history is fetched by the TS service and passed in the request body.
  * @param customerId The WhatsApp ID of the customer.
  * @param businessId The ID of the business the customer is interacting with.
  * @param message The current text/payload extracted from the webhook.
+ * @param history The recent conversation history for this customer.
  */
 export async function callAI(
   customerId: string,
   businessId: string | null,
   message: string,
+  state?: string,
+  data?: Record<string, unknown>,
+  history: Message[] = [],
 ): Promise<AIResponse> {
   const pythonServiceUrl = process.env.PYTHON_SERVICE_URL;
   const internalSecret = process.env.INTERNAL_SECRET;
@@ -29,7 +33,7 @@ export async function callAI(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${internalSecret}`,
     },
-    body: JSON.stringify({ customerId, message }),
+    body: JSON.stringify({ customerId, message, state, data, history }),
   });
 
   if (!response.ok) {
