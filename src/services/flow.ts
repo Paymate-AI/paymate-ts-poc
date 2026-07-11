@@ -3,7 +3,10 @@ import { getSession, updateSession } from '@/services/db.js';
 import { sendText } from '@/services/whatsapp.js';
 import { sendMainMenu } from '@/services/flows/menu.js';
 import { handleIdle, handleKycName, handleKycEmail } from '@/services/flows/kyc.js';
-import { handleOnboardingBusinessName } from '@/services/flows/onboarding.js';
+import {
+  handleOnboardingBusinessName,
+  handleOnboardingBusinessService,
+} from '@/services/flows/onboarding.js';
 import { handleIntentSelection } from '@/services/flows/intent.js';
 import { handleCustomerBrowsing } from '@/services/flows/customer-browsing.js';
 import { AIResponse } from '@/types/index.js';
@@ -75,6 +78,10 @@ export async function handleFlow(customerId: string, text: string): Promise<void
 
     case SessionState.ONBOARDING_BUSINESS_NAME:
       await handleOnboardingBusinessName(customerId, text);
+      break;
+
+    case SessionState.ONBOARDING_BUSINESS_SERVICE:
+      await handleOnboardingBusinessService(customerId, text);
       break;
 
     case SessionState.ONBOARDING_COMPLETE:
