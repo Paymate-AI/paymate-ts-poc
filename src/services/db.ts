@@ -111,6 +111,7 @@ export async function createBusiness(data: {
   uniqueCode: string;
   ownerName: string;
   email: string;
+  service: string;
 }) {
   return withRetry(() => prisma.business.create({ data }));
 }
@@ -131,7 +132,12 @@ export async function getBusinessByOwner(ownerWhatsappId: string) {
   );
 }
 
-export async function createCatalogItem(data: { businessId: string; name: string; price: number }) {
+export async function createCatalogItem(data: {
+  businessId: string;
+  name: string;
+  price: number;
+  quantity?: number;
+}) {
   return withRetry(() => prisma.catalogItem.create({ data }));
 }
 
