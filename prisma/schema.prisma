@@ -14,6 +14,7 @@ model Business {
   uniqueCode       String   @unique
   ownerName        String
   email            String
+  service          String   @default("Retail")
   createdAt        DateTime @default(now())
 
   catalogItems     CatalogItem[]
@@ -26,6 +27,7 @@ model CatalogItem {
   businessId String
   name       String
   price      Float
+  quantity   Int      @default(0)
   createdAt  DateTime @default(now())
 
   business   Business @relation(fields: [businessId], references: [id])
@@ -76,6 +78,7 @@ enum SessionState {
   KYC_EMAIL
   INTENT_SELECTION
   ONBOARDING_BUSINESS_NAME
+  ONBOARDING_BUSINESS_SERVICE
   ONBOARDING_COMPLETE
   CUSTOMER_BROWSING
   AWAITING_PAYMENT
