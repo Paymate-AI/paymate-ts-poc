@@ -72,20 +72,80 @@ export async function handleIntentSelection(
       return;
     }
 
+    const isQuantifiable = business.service === 'Retail';
+
+    if (isQuantifiable) {
+      await updateSession(customerId, {
+        data: {
+          ...sessionData,
+          catalogState: 'ADD_ITEM_QUANTITY',
+          pendingItemPrice: price,
+        },
+      });
+      await sendText(
+        customerId,
+        `Got it: price is *NGN ${price}*.\nWhat is the stock quantity of this item? (numbers only, e.g. 10 or 100)`,
+      );
+      return;
+    } else {
+      await createCatalogItem({
+        businessId: business.id,
+        name: sessionData.pendingItemName as string,
+        price,
+        quantity: 0,
+      });
+
+      const restData = { ...sessionData };
+      delete restData.catalogState;
+      delete restData.pendingItemName;
+      await updateSession(customerId, { data: restData });
+
+      await sendText(
+        customerId,
+        `✅ *${sessionData.pendingItemName}* has been added to your catalog at *NGN ${price}*!`,
+      );
+      await sendMainMenu(customerId, 'What would you like to do next?');
+      return;
+    }
+  }
+
+  if (catalogState === 'ADD_ITEM_QUANTITY') {
+    const quantity = parseInt(text.trim(), 10);
+    if (isNaN(quantity) || quantity < 0) {
+      await sendText(customerId, 'Please enter a valid stock quantity (numbers only, e.g. 10).');
+      return;
+    }
+
+    const business = await getBusinessByOwner(customerId);
+    if (!business) {
+      const restData = { ...sessionData };
+      delete restData.catalogState;
+      delete restData.pendingItemName;
+      delete restData.pendingItemPrice;
+      await updateSession(customerId, { data: restData });
+      await sendMainMenu(
+        customerId,
+        "We couldn't find a business for you. What would you like to do?",
+      );
+      return;
+    }
+
     await createCatalogItem({
       businessId: business.id,
       name: sessionData.pendingItemName as string,
-      price,
+      price: sessionData.pendingItemPrice as number,
+      quantity,
     });
 
     const restData = { ...sessionData };
     delete restData.catalogState;
     delete restData.pendingItemName;
+    delete restData.pendingItemPrice;
     await updateSession(customerId, { data: restData });
 
     await sendText(
       customerId,
-      `✅ *${sessionData.pendingItemName}* has been added to your catalog at *NGN ${price}*!`,
+      `✅ *${sessionData.pendingItemName}* has been added to your catalog at *NGN ${sessionData.pendingItemPrice}* with stock *${quantity}*!`,
     );
     await sendMainMenu(customerId, 'What would you like to do next?');
     return;
@@ -258,7 +318,15 @@ export async function handleIntentSelection(
     if (items.length === 0) {
       await sendText(customerId, 'Your catalog is empty! 🛍️');
     } else {
-      const catalogText = items.map((item) => `- *${item.name}*: NGN ${item.price}`).join('\n');
+      const isQuantifiable = business.service === 'Retail';
+      const catalogText = items
+        .map((item) => {
+          if (isQuantifiable) {
+            return `- *${item.name}*: NGN ${item.price} (Stock: ${item.quantity})`;
+          }
+          return `- *${item.name}*: NGN ${item.price}`;
+        })
+        .join('\n');
       await sendText(customerId, `*${business.businessName} Catalog*:\n\n${catalogText}`);
     }
 
