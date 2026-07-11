@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import prisma, { getConversationHistory } from '@/services/db.js';
 
 interface RawBusiness {
@@ -186,12 +186,45 @@ export async function chatsRoutes(app: FastifyInstance) {
     let totalAmount = 0;
     const resolvedItems = [];
 
-    // Let's resolve the product prices
+    // Lookup the business to check if quantifiable
+    const businessObj = await prisma.business.findFirst({
+      where: {
+        OR: [{ id: business_id }, { uniqueCode: business_id }],
+      },
+    });
+
+    let serviceType = 'Retail';
+    if (businessObj) {
+      serviceType = businessObj.service;
+    } else {
+      // Fallback search in SQL table
+      try {
+        const rawBiz = await prisma.$queryRawUnsafe<RawBusiness[]>(
+          `SELECT service FROM "businesses" WHERE id = $1 OR name = $2 LIMIT 1`,
+          business_id,
+          business_id,
+        );
+        if (rawBiz.length > 0) {
+          serviceType = rawBiz[0].service;
+        }
+      } catch (e) {
+        app.log.error(e, 'Failed to lookup business service type in fallback');
+      }
+    }
+
+    const isQuantifiable = serviceType === 'Retail';
+
+    // Let's resolve the product prices and check stock quantities
     for (const item of items) {
       const catalogItem = await prisma.catalogItem.findUnique({
         where: { id: item.product_id },
       });
       if (catalogItem) {
+        if (isQuantifiable && catalogItem.quantity < item.quantity) {
+          return reply.code(400).send({
+            error: `Insufficient stock for product ${catalogItem.name}. Available: ${catalogItem.quantity}, Requested: ${item.quantity}`,
+          });
+        }
         totalAmount += catalogItem.price * item.quantity;
         resolvedItems.push({
           product_id: catalogItem.id,
@@ -204,11 +237,16 @@ export async function chatsRoutes(app: FastifyInstance) {
         if (!isNaN(intId)) {
           try {
             const rawProducts = await prisma.$queryRawUnsafe<RawProduct[]>(
-              `SELECT id, name, price FROM "products" WHERE id = $1 LIMIT 1`,
+              `SELECT id, name, price, stock_quantity FROM "products" WHERE id = $1 LIMIT 1`,
               intId,
             );
             if (rawProducts.length > 0) {
               const p = rawProducts[0];
+              if (isQuantifiable && p.stock_quantity < item.quantity) {
+                return reply.code(400).send({
+                  error: `Insufficient stock for product ${p.name}. Available: ${p.stock_quantity}, Requested: ${item.quantity}`,
+                });
+              }
               totalAmount += p.price * item.quantity;
               resolvedItems.push({
                 product_id: String(p.id),
@@ -216,10 +254,17 @@ export async function chatsRoutes(app: FastifyInstance) {
                 price: p.price,
                 quantity: item.quantity,
               });
+            } else {
+              return reply
+                .code(404)
+                .send({ error: `Product with ID ${item.product_id} not found` });
             }
           } catch (e) {
             app.log.error(e, 'Resolving products via raw query failed');
+            return reply.code(500).send({ error: 'Database error resolving product' });
           }
+        } else {
+          return reply.code(404).send({ error: `Product with ID ${item.product_id} not found` });
         }
       }
     }
@@ -241,7 +286,7 @@ export async function chatsRoutes(app: FastifyInstance) {
           `INSERT INTO "order_items" (order_id, product_id, quantity, price)
            VALUES ($1, $2, $3, $4)`,
           orderId,
-          parseInt(resolved.product_id, 10) || 0,
+          resolved.product_id,
           resolved.quantity,
           resolved.price,
         );
@@ -365,6 +410,64 @@ export async function chatsRoutes(app: FastifyInstance) {
         status,
         reference,
       );
+
+      // If payment is successful, let's also update the inventory of the catalog items of the order!
+      if (status === 'success' || status === 'successful') {
+        const rawPayments = await prisma.$queryRawUnsafe<RawPayment[]>(
+          `SELECT order_id FROM "payments" WHERE reference = $1 LIMIT 1`,
+          reference,
+        );
+        if (rawPayments.length > 0) {
+          const orderId = rawPayments[0].order_id;
+          const rawOrders = await prisma.$queryRawUnsafe<RawOrder[]>(
+            `SELECT business_id FROM "orders" WHERE id = $1 LIMIT 1`,
+            orderId,
+          );
+
+          if (rawOrders.length > 0) {
+            const businessId = rawOrders[0].business_id;
+            const business = await prisma.business.findFirst({
+              where: {
+                OR: [{ id: businessId }, { uniqueCode: businessId }],
+              },
+            });
+
+            let serviceType = 'Retail';
+            if (business) {
+              serviceType = business.service;
+            } else {
+              const rawBiz = await prisma.$queryRawUnsafe<RawBusiness[]>(
+                `SELECT service FROM "businesses" WHERE id = $1 LIMIT 1`,
+                businessId,
+              );
+              if (rawBiz.length > 0) {
+                serviceType = rawBiz[0].service;
+              }
+            }
+
+            if (serviceType === 'Retail') {
+              const orderItems = await prisma.$queryRawUnsafe<
+                { product_id: string; quantity: number }[]
+              >(`SELECT product_id, quantity FROM "order_items" WHERE order_id = $1`, orderId);
+
+              for (const item of orderItems) {
+                const pId = String(item.product_id);
+                if (pId.startsWith('c')) {
+                  await prisma.catalogItem.update({
+                    where: { id: pId },
+                    data: {
+                      quantity: {
+                        decrement: item.quantity,
+                      },
+                    },
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+
       return reply.send({ success: true });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -389,4 +492,86 @@ export async function chatsRoutes(app: FastifyInstance) {
       return reply.code(500).send({ error: msg });
     }
   });
+
+  // POST /internal/updateCatelogItem (performs updateCatelogItem(catagoryId, quantity, action))
+  // Also supports /internal/catalog-item/update for clean path
+  const updateCatalogItemHandler = async (request: FastifyRequest, reply: FastifyReply) => {
+    const { catagoryId, quantity, action } = request.body as {
+      catagoryId: string;
+      quantity: number;
+      action: 'add' | 'subtract' | 'set';
+    };
+
+    if (!catagoryId || quantity === undefined || !action) {
+      return reply.code(400).send({ error: 'Missing catagoryId, quantity, or action' });
+    }
+
+    try {
+      const isCuid = typeof catagoryId === 'string' && catagoryId.startsWith('c');
+
+      if (isCuid) {
+        const item = await prisma.catalogItem.findUnique({
+          where: { id: catagoryId },
+        });
+
+        if (!item) {
+          return reply.code(404).send({ error: 'Catalog item not found' });
+        }
+
+        let newQuantity = item.quantity;
+        if (action === 'add') {
+          newQuantity += quantity;
+        } else if (action === 'subtract') {
+          newQuantity -= quantity;
+        } else if (action === 'set') {
+          newQuantity = quantity;
+        }
+
+        await prisma.catalogItem.update({
+          where: { id: catagoryId },
+          data: { quantity: newQuantity },
+        });
+
+        return reply.send({ success: true, catagoryId, newQuantity });
+      } else {
+        const intId = parseInt(catagoryId, 10);
+        if (isNaN(intId)) {
+          return reply.code(400).send({ error: 'Invalid product ID format' });
+        }
+
+        const rawProducts = await prisma.$queryRawUnsafe<{ stock_quantity: number }[]>(
+          `SELECT stock_quantity FROM "products" WHERE id = $1 LIMIT 1`,
+          intId,
+        );
+
+        if (rawProducts.length === 0) {
+          return reply.code(404).send({ error: 'Product not found in database' });
+        }
+
+        let newQuantity = rawProducts[0].stock_quantity;
+        if (action === 'add') {
+          newQuantity += quantity;
+        } else if (action === 'subtract') {
+          newQuantity -= quantity;
+        } else if (action === 'set') {
+          newQuantity = quantity;
+        }
+
+        await prisma.$executeRawUnsafe(
+          `UPDATE "products" SET stock_quantity = $1, updated_at = NOW() WHERE id = $2`,
+          newQuantity,
+          intId,
+        );
+
+        return reply.send({ success: true, catagoryId, newQuantity });
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      request.log.error(e, 'Failed to update catalog item');
+      return reply.code(500).send({ error: msg });
+    }
+  };
+
+  app.post('/internal/updateCatelogItem', updateCatalogItemHandler);
+  app.post('/internal/catalog-item/update', updateCatalogItemHandler);
 }
