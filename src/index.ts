@@ -16,6 +16,11 @@ fastify.register(webhookRoutes);
 // AI Bot routes
 fastify.register(chatsRoutes);
 
+// Health check endpoint
+fastify.get('/health', async () => {
+  return { status: 'ok' };
+});
+
 // Get Port from environment
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 8080;
 
