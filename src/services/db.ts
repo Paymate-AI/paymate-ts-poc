@@ -78,12 +78,13 @@ export async function getConversationHistory(
   const messages = await withRetry(() =>
     prisma.conversationMessage.findMany({
       where: { customerWhatsappId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: 'desc' },
       take: limit,
     }),
   );
 
-  return messages.map((m) => ({
+  // Reverse them to restore chronological order (asc) for the AI prompt
+  return messages.reverse().map((m) => ({
     role: m.role === MessageRole.user ? 'user' : 'assistant',
     content: m.content,
   }));

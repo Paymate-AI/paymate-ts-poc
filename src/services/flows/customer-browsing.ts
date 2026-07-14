@@ -7,9 +7,10 @@ export async function handleCustomerBrowsing(
   customerId: string,
   businessId: string | null,
   text: string,
+  stateOverride?: string,
 ): Promise<AIResponse['action'] | null> {
   const session = await getSession(customerId);
-  if (!businessId && session.state === 'CUSTOMER_BROWSING') {
+  if (!businessId && session.state === 'CUSTOMER_BROWSING' && !stateOverride) {
     await sendText(
       customerId,
       "Something went wrong — I've lost track of which business you're browsing. Type 'reset' to start over.",
@@ -26,7 +27,7 @@ export async function handleCustomerBrowsing(
       customerId,
       businessId,
       text,
-      session.state,
+      stateOverride ?? session.state,
       session.data as Record<string, unknown>,
       history,
     );

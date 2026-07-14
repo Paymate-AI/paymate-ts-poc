@@ -27,86 +27,13 @@ export async function handleIntentSelection(
   // 1. Handle Active Catalog/Deletion Sub-states
 
   if (catalogState === 'ADD_ITEM_NAME') {
-    const itemName = text.trim();
-    if (itemName.length < 2) {
-      await sendText(customerId, 'Please enter a valid item name (at least 2 characters).');
-      return;
-    }
-
-    await updateSession(customerId, {
-      data: {
-        ...sessionData,
-        catalogState: 'ADD_ITEM_PRICE',
-        pendingItemName: itemName,
-      },
-    });
-
-    await sendText(
-      customerId,
-      `Got it: *${itemName}*.\nWhat is the price of this item? (numbers only, e.g. 500 or 1500.50)`,
-    );
-    return;
+    // Route to AI bot to extract the product name from natural language
+    return handleCustomerBrowsing(customerId, null, text, 'ADD_ITEM_NAME');
   }
 
   if (catalogState === 'ADD_ITEM_PRICE') {
-    const price = parseFloat(text.trim());
-    if (isNaN(price) || price <= 0) {
-      await sendText(
-        customerId,
-        'Invalid price. Please enter a valid number greater than 0 (e.g. 750).',
-      );
-      return;
-    }
-
-    const business = await getBusinessByOwner(customerId);
-    if (!business) {
-      // Safety check: reset sub-state if business was deleted in the interim
-      const restData = { ...sessionData };
-      delete restData.catalogState;
-      delete restData.pendingItemName;
-      await updateSession(customerId, { data: restData });
-      await sendMainMenu(
-        customerId,
-        "We couldn't find a business for you. What would you like to do?",
-      );
-      return;
-    }
-
-    const isQuantifiable = business.service === 'Retail';
-
-    if (isQuantifiable) {
-      await updateSession(customerId, {
-        data: {
-          ...sessionData,
-          catalogState: 'ADD_ITEM_QUANTITY',
-          pendingItemPrice: price,
-        },
-      });
-      await sendText(
-        customerId,
-        `Got it: price is *NGN ${price}*.\nWhat is the stock quantity of this item? (numbers only, e.g. 10 or 100)`,
-      );
-      return;
-    } else {
-      await createCatalogItem({
-        businessId: business.id,
-        name: sessionData.pendingItemName as string,
-        price,
-        quantity: 0,
-      });
-
-      const restData = { ...sessionData };
-      delete restData.catalogState;
-      delete restData.pendingItemName;
-      await updateSession(customerId, { data: restData });
-
-      await sendText(
-        customerId,
-        `✅ *${sessionData.pendingItemName}* has been added to your catalog at *NGN ${price}*!`,
-      );
-      await sendMainMenu(customerId, 'What would you like to do next?');
-      return;
-    }
+    // Route to AI bot to extract the price from natural language
+    return handleCustomerBrowsing(customerId, null, text, 'ADD_ITEM_PRICE');
   }
 
   if (catalogState === 'ADD_ITEM_QUANTITY') {

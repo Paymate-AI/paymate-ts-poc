@@ -25,8 +25,8 @@ export async function handleOnboardingBusinessName(
   });
 
   await sendButtons(customerId, `Great! What type of business or service is *${businessName}*?`, [
-    { id: 'Retail', title: 'Retail (Goods/Products)' },
-    { id: 'Services', title: 'Services (Non-physical)' },
+    { id: 'Retail', title: 'Retail' },
+    { id: 'Services', title: 'Services' },
   ]);
 }
 
