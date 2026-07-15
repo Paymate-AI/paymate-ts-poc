@@ -59,7 +59,6 @@ export async function chatsRoutes(app: FastifyInstance) {
   app.get('/internal/business/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
 
-    // First lookup in Prisma Business model
     const business = await prisma.business.findFirst({
       where: {
         OR: [{ id }, { uniqueCode: id }],
@@ -74,40 +73,12 @@ export async function chatsRoutes(app: FastifyInstance) {
         ownerWhatsappId: business.ownerWhatsappId,
         ownerName: business.ownerName,
         email: business.email,
-        service: 'Retail', // default fallback for python context
+        service: business.service,
         state: 'Lagos',
         city: 'Lagos',
         address: 'HQ',
         phone: business.ownerWhatsappId,
       });
-    }
-
-    // Fallback: search in "businesses" (SQLAlchemy) table
-    try {
-      const rawBiz = await prisma.$queryRawUnsafe<RawBusiness[]>(
-        `SELECT * FROM "businesses" WHERE id = $1 OR name = $2 LIMIT 1`,
-        id,
-        id,
-      );
-
-      if (rawBiz.length > 0) {
-        const b = rawBiz[0];
-        return reply.send({
-          id: b.id,
-          name: b.name,
-          uniqueCode: b.name.toLowerCase().replace(/[^a-z0-9]/g, ''),
-          ownerWhatsappId: b.phone,
-          ownerName: 'Owner',
-          email: 'contact@' + b.name.toLowerCase().replace(/[^a-z0-9]/g, '') + '.com',
-          service: b.service,
-          state: b.state,
-          city: b.city,
-          address: b.address,
-          phone: b.phone,
-        });
-      }
-    } catch (e) {
-      app.log.error(e, 'Fallback search in businesses table failed');
     }
 
     return reply.code(404).send({ error: 'Business not found' });
@@ -118,7 +89,6 @@ export async function chatsRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
     const query = (request.query as { query?: string }).query || '';
 
-    // First lookup in Prisma Business model
     const business = await prisma.business.findFirst({
       where: {
         OR: [{ id }, { uniqueCode: id }],
@@ -140,36 +110,9 @@ export async function chatsRoutes(app: FastifyInstance) {
           id: item.id,
           name: item.name,
           price: item.price,
-          stock_quantity: 999,
+          stock_quantity: item.quantity,
         })),
       );
-    }
-
-    // Fallback search in "businesses" & "products"
-    try {
-      const rawBiz = await prisma.$queryRawUnsafe<RawBusiness[]>(
-        `SELECT id FROM "businesses" WHERE id = $1 OR name = $2 LIMIT 1`,
-        id,
-        id,
-      );
-      if (rawBiz.length > 0) {
-        const bId = rawBiz[0].id;
-        const products = await prisma.$queryRawUnsafe<RawProduct[]>(
-          `SELECT id, name, price, stock_quantity FROM "products" WHERE business_id = $1 AND name ILIKE $2`,
-          bId,
-          `%${query}%`,
-        );
-        return reply.send(
-          products.map((p) => ({
-            id: String(p.id),
-            name: p.name,
-            price: p.price,
-            stock_quantity: p.stock_quantity,
-          })),
-        );
-      }
-    } catch (e) {
-      app.log.error(e, 'Fallback search in products table failed');
     }
 
     return reply.send([]);

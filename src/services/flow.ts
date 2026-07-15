@@ -278,7 +278,11 @@ export async function handleFlow(customerId: string, text: string): Promise<void
     businessCode: string | null | undefined,
   ): Promise<void> {
     const currentSession = await getSession(customerId);
-    const code = businessCode || currentSession.activeBusinessCode;
+    const code =
+      businessCode ||
+      (currentSession.state === SessionState.CUSTOMER_BROWSING
+        ? currentSession.activeBusinessCode
+        : null);
 
     if (code) {
       const business = await getBusinessByCode(code);
@@ -297,7 +301,7 @@ export async function handleFlow(customerId: string, text: string): Promise<void
         await sendMainMenu(customerId, 'What would you like to do next?');
       }
     } else {
-      // If no store code is specified, try to search globally across all businesses
+      // If no store code is specified, try to search globally across all businesses by product name
       try {
         const trimmedQuery = query?.trim();
         if (trimmedQuery) {
@@ -319,6 +323,7 @@ export async function handleFlow(customerId: string, text: string): Promise<void
             );
 
             if (uniqueBusinesses.length === 1) {
+              // Exactly one business stocks this product — route directly
               const business = uniqueBusinesses[0];
               await updateSession(customerId, {
                 state: SessionState.CUSTOMER_BROWSING,
@@ -327,6 +332,7 @@ export async function handleFlow(customerId: string, text: string): Promise<void
               });
               return handleFlow(customerId, query);
             } else {
+              // Multiple businesses sell this — let the user choose
               const businessListText = uniqueBusinesses
                 .map((b, idx) => `${idx + 1}. *${b.businessName}* (Code: ${b.uniqueCode})`)
                 .join('\n');
@@ -339,27 +345,16 @@ export async function handleFlow(customerId: string, text: string): Promise<void
             }
           }
         }
-
-        // Fallback: If no query/matches, check if there is exactly one business in the DB
-        const allBusinesses = await prisma.business.findMany();
-        if (allBusinesses.length === 1) {
-          const business = allBusinesses[0];
-          await updateSession(customerId, {
-            state: SessionState.CUSTOMER_BROWSING,
-            activeBusinessCode: business.uniqueCode,
-            activeBusinessId: business.id,
-          });
-          return handleFlow(customerId, query || 'view_catalog');
-        }
       } catch (err) {
-        console.error('Error performing global product search fallback:', err);
+        console.error('Error performing global product search:', err);
       }
 
+      // No matching products found anywhere — ask user to provide a store code
       await sendText(
         customerId,
-        "Please specify which store you want to browse by typing its store code (e.g., 'mamatopekitchen').",
+        `Sorry, I couldn't find any products matching *"${query}"* in our network.\n\nIf you know the store code, please type it now (e.g. _tinibuboys_). Otherwise, ask the seller to share their store link with you.`,
       );
-      await sendMainMenu(customerId, 'Please select an option below:');
+      await sendMainMenu(customerId, 'What would you like to do?');
     }
   }
 }
