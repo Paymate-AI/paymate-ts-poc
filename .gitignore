@@ -17,3 +17,5 @@ dist/
 
 /src/generated/prisma
 cloud-sql-proxy
+
+certs/
