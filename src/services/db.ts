@@ -2,10 +2,14 @@ import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient, SessionState, MessageRole, Prisma } from '@/generated/prisma/client.js';
 import { Message } from '@/types/index.js';
+import fs from 'fs';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+  ssl: {
+    ca: fs.readFileSync(process.env.AIVEN_CA_CERT_PATH ?? './certs/aiven-ca.pem').toString(),
+    rejectUnauthorized: true, // now verifies against the real CA, properly
+  },
   max: 5,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 20000,
@@ -15,12 +19,12 @@ const adapter = new PrismaPg(pool);
 
 const prisma = new PrismaClient({ adapter });
 
-setInterval(
-  async () => {
-    await prisma.$queryRaw`SELECT 1`;
-  },
-  3 * 60 * 1000,
-); // ping every 3 minutes
+// setInterval(
+//   async () => {
+//     await prisma.$queryRaw`SELECT 1`;
+//   },
+//   3 * 60 * 1000,
+// ); // ping every 3 minutes
 
 export default prisma;
 
