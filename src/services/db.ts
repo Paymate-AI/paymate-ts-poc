@@ -7,7 +7,7 @@ import fs from 'fs';
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
-    ca: fs.readFileSync(process.env.AIVEN_CA_CERT ?? './certs/aiven-ca.pem').toString(),
+    ca: process.env.AIVEN_CA_CERT,
     rejectUnauthorized: true, // now verifies against the real CA, properly
   },
   max: 5,
