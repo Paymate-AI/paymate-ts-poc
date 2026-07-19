@@ -4,11 +4,17 @@ import { PrismaClient, SessionState, MessageRole, Prisma } from '@/generated/pri
 import { Message } from '@/types/index.js';
 import fs from 'fs';
 
+const dbUrl = new URL(process.env.DATABASE_URL!);
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  host: dbUrl.hostname,
+  port: parseInt(dbUrl.port, 10),
+  user: decodeURIComponent(dbUrl.username),
+  password: decodeURIComponent(dbUrl.password),
+  database: dbUrl.pathname.slice(1),
   ssl: {
     ca: process.env.AIVEN_CA_CERT,
-    rejectUnauthorized: true, // now verifies against the real CA, properly
+    rejectUnauthorized: true,
   },
   max: 5,
   idleTimeoutMillis: 30000,
