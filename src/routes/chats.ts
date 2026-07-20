@@ -87,7 +87,7 @@ export async function chatsRoutes(app: FastifyInstance) {
   // GET /internal/business/:id/products
   app.get('/internal/business/:id/products', async (request, reply) => {
     const { id } = request.params as { id: string };
-    const query = (request.query as { query?: string }).query || '';
+    const name = (request.query as { name?: string }).name || '';
 
     const business = await prisma.business.findFirst({
       where: {
@@ -100,13 +100,13 @@ export async function chatsRoutes(app: FastifyInstance) {
         where: {
           businessId: business.id,
           name: {
-            contains: query,
+            contains: name,
             mode: 'insensitive',
           },
         },
       });
       return reply.send(
-        items.map((item) => ({
+        items.map((item: { id: string; name: string; price: number; quantity: number }) => ({
           id: item.id,
           name: item.name,
           price: item.price,
