@@ -42,7 +42,7 @@ export async function chatsRoutes(app: FastifyInstance) {
   // Global hook for internal routes authentication
   app.addHook('preHandler', async (request, reply) => {
     const authHeader = request.headers['authorization'];
-    const expected = `Bearer ${process.env.INTERNAL_SECRET}`;
+    const expected = `Bearer ${process.env.INTERNAL_SECRET?.trim()}`;
 
     if (authHeader !== expected) {
       return reply.code(401).send({ error: 'Unauthorized' });

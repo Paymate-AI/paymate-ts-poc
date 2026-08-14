@@ -31,7 +31,7 @@ export async function callAI(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${internalSecret}`,
+      Authorization: `Bearer ${internalSecret.trim()}`,
     },
     body: JSON.stringify({ customerId, message, state, data, history }),
   });
