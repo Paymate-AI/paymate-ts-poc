@@ -37,7 +37,16 @@ export async function handleCustomerBrowsing(
     if (aiResponse.action?.type === 'HUMAN_HANDOFF') {
       // TODO: escalate to business owner once that flow exists
     }
-    // COLLECT_PAYMENT / PAYMENT_SUCCESSFUL — payload available for future wiring
+
+    if (aiResponse.action?.type === 'PAYMENT_SUCCESSFUL') {
+      const amount = aiResponse.action.payload?.amount as number | undefined;
+      const amountStr = amount ? `NGN ${Number(amount).toLocaleString('en-NG')}` : 'your payment';
+      await sendText(
+        customerId,
+        `✅ *Payment Confirmed!*\n\nWe've received ${amountStr} successfully. Thank you for your order! 🎉\n\nType *'main menu'* to continue shopping.`,
+      );
+    }
+
     return aiResponse.action;
   } catch (err) {
     console.error('Error in handleCustomerBrowsing calling Python AI:', err);

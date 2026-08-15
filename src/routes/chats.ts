@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import prisma, { getConversationHistory } from '@/services/db.js';
+import { sendText } from '@/services/whatsapp.js';
 
 interface RawBusiness {
   id: string;
@@ -414,6 +415,35 @@ export async function chatsRoutes(app: FastifyInstance) {
       return reply.send({ success: true });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
+      return reply.code(500).send({ error: msg });
+    }
+  });
+
+  // POST /internal/notify/payment-success
+  // Called by the Python background reconciler when a payment is confirmed asynchronously.
+  app.post('/internal/notify/payment-success', async (request, reply) => {
+    const { customer_whatsapp_id, amount, reference } = request.body as {
+      customer_whatsapp_id: string;
+      amount?: number;
+      reference?: string;
+    };
+
+    if (!customer_whatsapp_id) {
+      return reply.code(400).send({ error: 'Missing customer_whatsapp_id' });
+    }
+
+    const amountStr = amount ? `NGN ${Number(amount).toLocaleString('en-NG')}` : 'your payment';
+    const refStr = reference ? `\n\nReference: \`${reference}\`` : '';
+
+    try {
+      await sendText(
+        customer_whatsapp_id,
+        `✅ *Payment Confirmed!*\n\nWe've received ${amountStr} successfully. Thank you for your order! 🎉${refStr}\n\nType *'main menu'* to continue shopping.`,
+      );
+      return reply.send({ success: true });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      app.log.error(e, 'Failed to send payment success notification');
       return reply.code(500).send({ error: msg });
     }
   });
